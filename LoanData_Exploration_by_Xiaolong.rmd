@@ -1,0 +1,761 @@
+---
+title: "Loan Data from Prosper Exploration"
+author: "Xiaolong Yang"
+date: "December 23, 2016"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE)
+```
+
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+library(ggplot2)
+library(maps)
+library(dplyr)
+library(GGally)
+library(corrplot) 
+library(RColorBrewer)
+```
+## Abstract
+Prosper is America's first peer-to-peer lending marketplace, with more than 2 million members and over $2,000,000,000 in funded loans.
+```{r load data, warning=FALSE}
+loan = read.csv("prosperLoanData.csv")
+dim(loan)
+```
+The Prosper loan dataset contains 81 variables, with almost 114000 observations. However, not all of the variables are valuable to explore.
+In the following analysis, I would focus on loan amount, loan original date, estimated return, current loan status, Prosper rating, Prosper score, listing category,borrower APR, borrower income, borrower employment status,borrower occupation, borrower home owner, borrower credit history, borrower state, borrower total Prosper loans. The following give a glimpse.
+
+```{r selected, warning=FALSE,message=FALSE}
+selected <- c("LoanOriginalAmount","LoanOriginationDate","EstimatedReturn","LoanStatus","ProsperRating..Alpha.","ProsperScore","ListingCategory..numeric.","BorrowerAPR", "IncomeRange","StatedMonthlyIncome","DebtToIncomeRatio","EmploymentStatus","EmploymentStatusDuration","Occupation","IsBorrowerHomeowner", "CreditScoreRangeLower","CreditScoreRangeUpper","MonthlyLoanPayment", "BorrowerState","TotalProsperLoans","LenderYield")
+loan2 = loan[selected]
+str(loan2)
+summary(loan2)
+```
+## Univariate Plots Section
+The univariate plots would be devided into two sections: one for loan, another for borrowers. 
+
+First, we plot the Loan original amount histograms for Prosper.
+The loan amounts skew to left, with the median of 6,500 less than the mean of 8,337. In this case, I rescale the x axis. 
+```{r LoanOriginalAmount, warning=FALSE}
+ggplot()+
+    geom_bar(data= loan2, aes(x= LoanOriginalAmount),colour="black",fill = I('#099DD9'),binwidth = 0.05)+
+    scale_x_log10()+
+    scale_y_sqrt()
+
+```
+The loan original amount histogram is normal distributed. It peaks at 15,000 where loan original amount is 1,500, which means 15,000 loans' amounts is $1,500. 
+
+Next, we plot the Loan original time histograms for Prosper.
+The data provided is allocate by date, to make it easier to find the trend, I reallocated the data by year.
+```{r LoanOriginationYear, warning=FALSE}
+loan2$LoanOriginationDate <-
+    as.Date(loan2$LoanOriginationDate)
+loan2$LoanOriginationyear = as.numeric(format(loan2$LoanOriginationDate, "%Y"))
+
+date <-loan2 %>%
+    mutate(year = format(loan2$LoanOriginationDate, "%Y"))%>%
+    group_by(year) %>%
+    summarise(count = n())
+
+ggplot(data=date, aes(x=year, y=count,group = 1)) + geom_line() + geom_point(size=4, shape=20)
+```
+There is a sharp dip in 2009, and not recover to previous level until 2011. It corelate with climax and end the 2008 global financial crisis. Since the last data collected on March 2014, there is a big drop in the histgram in 2014.
+
+Next, we look at Loan status count:
+```{r Loan status, warning=FALSE}
+qplot(data=loan2, x = LoanStatus, fill = I('#099DD9'))+
+    theme(axis.text.x=element_text(angle = 30,size = rel(0.8)))+
+    scale_y_log10()
+
+```
+Most of the data is completed, chargedoff, current or default, and there are seires of past due data.
+Later, I would analyze the data into 4 sections to make it easier to analyze. 
+Next, we look at prosper risk rating.
+
+```{r ProsperRating, warning=FALSE}
+loan2$ProsperRating..Alpha. <- factor(loan2$ProsperRating..Alpha., c("AA", "A", "B","C","D","E","HR",""))
+
+
+qplot(data=subset(loan2, ProsperRating..Alpha.!=''), x = ProsperRating..Alpha., fill = I('#099DD9'))
+```
+We can easily find it follow the normal distribution. It peaks at C with over 20,000 count.
+
+Higher rating is eqaul to higher score, we can analyze the prosper score next:
+
+```{r ProsperScore, warning=FALSE}
+qplot(data=loan2, binwidth = 0.5, x = ProsperScore, fill = I('#099DD9'))
+```
+It also follow the normal distribution. Compare both rating and score, we can estimate the prosper loan risk is normal distributed.
+
+Another interesting question is why people loan from prosper. We plot the histogram of the listing category below. Because the data provided only the identigy number, I would rename the properties by Variable Definitions file
+```{r ListingCategory processing, warning=FALSE}
+ListingCategory <- c("Not Available", "Debt Consolidation", "Home Improvement", "Business", "Personal Loan", "Student Use", "Auto", "Other", "Baby&Adoption" , "Boat","Cosmetic Procedure", "Engagement Ring", "Green Loans", "Household Expenses", "Large Purchases", "Medical/Dental", "Motorcycle", "RV", "Taxes", "Vacation", "Wedding Loans")
+
+    
+loan2$ListingCategory <- ListingCategory[loan2$ListingCategory..numeric.+1]
+
+loan2$ListingCategory <- factor(loan2$ListingCategory)
+
+sample_loan <- subset(loan2,!is.na(ListingCategory)) %>%
+    group_by(ListingCategory) %>%
+    summarise(n = n()) %>%
+    arrange(desc(n))
+sample_loan[c(1:5),1]
+```
+The top 5 loan reason is Debt consolidation, not available, other and Business. Since we did not know what is the actual reason in the first 4, we will omit that and analyze other specific reasons.
+```{r ListingCategory plot, warning=FALSE}
+qplot(data=subset(loan2,ListingCategory!="Debt Consolidation"&ListingCategory!="Not Available"&ListingCategory!="Other"), x = ListingCategory, fill = I('#099DD9'))+
+    theme(axis.text.x=element_text(angle = 90,size = rel(0.8)))+
+    scale_y_log10()
+```
+We can find now the 5 top reasons why people loan is Home Improvement, Business, Auto, Personal Loan and Household Expenses. Most of the count of other variable is among 100 and 1,000.
+
+Next, we will analyze the BorrowAPR, Borrower's Annual Percentage Rate for the loan. It indicate the yield rate for borrowers, decided by market rate and the urgency of borrowers.
+```{r BorrowerAPR, warning=FALSE}
+ggplot()+
+    geom_bar(data= loan2, aes(x= BorrowerAPR),binwidth = 0.025,colour="black",fill = I('#099DD9'))+
+    xlim(0.05,0.4)
+```
+We can easily find it is normal distributed. 
+
+```{r IncomeRange, warning=FALSE}
+qplot(data=loan2, x = IncomeRange, fill = I('#099DD9'))+
+    theme(axis.text.x=element_text(angle = 30,size = rel(0.8)))
+```
+```{r Debt/Income, warning=FALSE}
+qplot(data=loan2, x = DebtToIncomeRatio, binwidth=0.05, fill = I('#099DD9'))+xlim(0,1)
+```
+
+```{r EmploymentStatus, warning=FALSE}
+qplot(data=loan2, x = EmploymentStatus, fill = I('#099DD9'))+
+    theme(axis.text.x=element_text(angle = 30,size = rel(0.8)))+
+    scale_y_sqrt()
+```
+```{r Employment Status Duration, warning=FALSE}
+qplot(data=loan2, x = EmploymentStatusDuration/12, binwidth = 1, fill = I('#099DD9'))+
+    theme(axis.text.x=element_text(angle = 30,size = rel(0.8)))
+```
+```{r occupation,warning=FALSE }
+qplot(data=loan2, x = Occupation, fill = I('#099DD9'))+
+    theme(axis.text.x=element_text(angle = 90,size = rel(0.8)))+
+    scale_y_log10()
+```
+```{r home onwer, warning=FALSE}
+pie <- ggplot(loan2, aes(x = factor(1), fill = factor(IsBorrowerHomeowner))) +
+ geom_bar(width = 1)
+pie + coord_polar(theta = "y")+
+    labs(fill = "Home Owner")
+```
+
+```{r CreditScoreRangeLower, warning=FALSE}
+qplot(data=loan2, x = CreditScoreRangeLower,binwidth = 10, fill = I('#099DD9'))
+```
+```{r Credit score range lower clean outliers , warning=FALSE}
+qplot(data=loan2, x = CreditScoreRangeLower,binwidth = 10, xlim=c(400, 900), fill = I('#099DD9'))
+    
+```
+
+```{r CreditScoreRangeUpper, warning=FALSE}
+qplot(data=loan2, x = CreditScoreRangeUpper,binwidth = 10, fill = I('#099DD9'))
+```
+```{r Credit Score Range Upper clean outliers, warning=FALSE}
+qplot(data=loan2, x = CreditScoreRangeUpper,binwidth = 10,xlim=c(400, 900), fill = I('#099DD9'))
+
+```
+
+```{r state abb transform}
+ #'x' is the column of a data.frame that holds 2 digit state codes
+stateFromLower <-function(x) {
+   #read 52 state codes into local variable [includes DC (Washington D.C. and PR (Puerto Rico)]
+  st.codes<-data.frame(
+                      state=as.factor(c("AK", "AL", "AR", "AZ", "CA", "CO", "CT", "DC", "DE", "FL", "GA",
+                                         "HI", "IA", "ID", "IL", "IN", "KS", "KY", "LA", "MA", "MD", "ME",
+                                         "MI", "MN", "MO", "MS",  "MT", "NC", "ND", "NE", "NH", "NJ", "NM",
+                                         "NV", "NY", "OH", "OK", "OR", "PA", "PR", "RI", "SC", "SD", "TN",
+                                         "TX", "UT", "VA", "VT", "WA", "WI", "WV", "WY")),
+                      full=as.factor(c("alaska","alabama","arkansas","arizona","california","colorado",
+                                       "connecticut","district of columbia","delaware","florida","georgia",
+                                       "hawaii","iowa","idaho","illinois","indiana","kansas","kentucky",
+                                       "louisiana","massachusetts","maryland","maine","michigan","minnesota",
+                                       "missouri","mississippi","montana","north carolina","north dakota",
+                                       "nebraska","new hampshire","new jersey","new mexico","nevada",
+                                       "new york","ohio","oklahoma","oregon","pennsylvania","puerto rico",
+                                       "rhode island","south carolina","south dakota","tennessee","texas",
+                                       "utah","virginia","vermont","washington","wisconsin",
+                                       "west virginia","wyoming"))
+                       )
+     #create an nx1 data.frame of state codes from source column
+  st.x<-data.frame(state=x)
+     #match source codes with codes from 'st.codes' local variable and use to return the full state name
+  refac.x<-st.codes$full[match(st.x$state,st.codes$state)]
+     #return the full state names in the same order in which they appeared in the original source
+  return(refac.x)
+ 
+}
+```
+
+```{r borrower state map, warning=FALSE}
+all_states <- map_data("state")
+borrowerstate <- loan2 %>%
+    group_by(BorrowerState) %>%
+    summarise(n = n()) %>%
+arrange(BorrowerState)
+
+borrowerstate <- borrowerstate[borrowerstate$BorrowerState!="",]
+
+borrowerstate$region <-stateFromLower(borrowerstate$BorrowerState)
+
+Total <- merge(all_states, borrowerstate, by="region")
+
+ggplot()+ 
+    geom_polygon(data=Total, aes(x=long, y=lat, group = group, fill=Total$n),colour="white"
+      ) + scale_fill_continuous(low = "lightblue", high = "darkblue", guide="colorbar")+ 
+    theme_bw()  + 
+    labs(fill = "borrowers",title = "Count of borrowers in each state", x="", y="")+
+    scale_y_continuous(breaks=c()) + scale_x_continuous(breaks=c()) + theme(panel.border =  element_blank())
+```
+
+```{r Total Prosper Loans, warning=FALSE}
+
+qplot(data=loan2, x = TotalProsperLoans,binwidth = 0.5, fill = I('#099DD9'))+
+    scale_y_log10()
+```
+
+# Univariate Analysis
+
+### What is the structure of your dataset?
+
+### What is/are the main feature(s) of interest in your dataset?
+
+### What other features in the dataset do you think will help support your investigation into your feature(s) of interest?
+
+### Did you create any new variables from existing variables in the dataset?
+
+### Of the features you investigated, were there any unusual distributions? Did you perform any operations on the data to tidy, adjust, or change the form of the data? If so, why did you do this?
+
+
+# Bivariate Plots Section
+```{r bivariate compare, warning=FALSE,message=FALSE}
+set.seed(1)
+loan_sample = loan2[sample(1:length(loan2$LoanOriginalAmount), 10000), c("LoanOriginalAmount", "EstimatedReturn","ProsperScore","BorrowerAPR","DebtToIncomeRatio","EmploymentStatusDuration","CreditScoreRangeLower","MonthlyLoanPayment","TotalProsperLoans","LoanOriginationyear")]
+names(loan2$loan_sample)
+res <- round(cor(loan_sample, use="complete.obs"),2)
+corrplot(res, type = "upper", order = "hclust", 
+         tl.col = "black", tl.srt = 45)
+ggpairs(data=loan_sample)
+```
+
+Pick those absolute correlation efficient higher than 0.4 to analyze
+
+```{r LoanOriginalAmount and MonthlyLoanPayment}
+ggplot(data = loan2, aes(x= LoanOriginalAmount, y = MonthlyLoanPayment))+
+      xlim(0,quantile(loan2$LoanOriginalAmount, 0.99))+
+      ylim(0,quantile(loan2$MonthlyLoanPayment, 0.99))+
+    geom_jitter(color = '#F79420',alpha =1/20)+
+    geom_smooth(method = 'lm')
+```
+
+```{r EstimatedReturn and BorrowerAPR}
+ggplot(aes(x= EstimatedReturn, y = BorrowerAPR),data = subset(loan2,!is.na(EstimatedReturn)))+xlim(0,quantile(subset(loan2,!is.na(EstimatedReturn))$EstimatedReturn, 0.99))+
+  geom_point(color = '#F79420',alpha = 1/20)+
+  geom_smooth(method = 'lm')
+```
+
+```{r ProsperScore and BorrowerAPR}
+ggplot(data = subset(loan2,!is.na(ProsperScore)), aes(x= ProsperScore, y = BorrowerAPR))+
+    xlim(0,quantile(subset(loan2,!is.na(ProsperScore))$ProsperScore, 0.99))+
+    geom_jitter(color = '#F79420',alpha =1/40)+
+    geom_smooth(method = 'lm')
+```
+
+```{r BorrowerAPR and CreditScoreRangeLower}
+ggplot(data = subset(loan2,!is.na(BorrowerAPR)&!is.na(CreditScoreRangeLower)), aes(x= BorrowerAPR, y = CreditScoreRangeLower) )+
+    xlim(0.05,0.4)+
+    ylim(400,900)+
+    geom_jitter(color = '#F79420', alpha = 1/20)+
+    geom_smooth(method = 'lm')
+```
+
+# Then we analyze factors effect
+From the analysis above, we can find the key parameters are the borrower APR and the loan original amount, with whom other parameters have relation.
+
+Then I would analyze other factors relation with them. 
+
+To simplify the analysis, I would use practical experience to reallocate those factors:
+
+For loan status, we can set 4 case:
+In process contains current and Final payment in process; Past Due contains all Past Due; completed; Bad debt contains defaulted and chargedoff. However, since "completed" could used to be any other case, I would only analyze on the other.
+
+```{r status}
+status <- loan2$LoanStatus
+levels(status) <- c(NA, "Bad debt", NA,"In process","Bad debt","In process","Past Due","Past Due","Past Due","Past Due","Past Due","Past Due")
+loan2$status <-status
+```
+
+For Loan Origination year, we can split it as pre 2009 and post 2009, due to the financial crisis.
+
+```{r years}
+year <- factor(loan2$LoanOriginationyear)
+levels(year) <- c("Pre-2009","Pre-2009","Pre-2009","Pre-2009","Pre-2009", "Post-2009", "Post-2009", "Post-2009", "Post-2009", "Post-2009")
+loan2$year <-year
+
+```
+Now make a pair comparement bewteen Loan original amount v.s. other factors
+
+```{r LoanOriginalAmount v.s. factors, warning=FALSE,message=FALSE}
+set.seed(1)
+loan_sample = loan2[sample(1:length(loan2$LoanOriginalAmount), 10000), c("LoanOriginalAmount","status","ProsperRating..Alpha.","year")]
+
+ggpairs(data=loan_sample)
+```
+we can find all factors above affected OriginalAmount.
+
+```{r LoanOriginalAmount and Loan  status}
+loan_sample = loan2[ c("LoanOriginalAmount","status")]
+loan_sample$Team2 <- factor(loan_sample$status, c("In process", "Past Due","Bad debt"))
+loan_sample=subset(loan_sample,!is.na(Team2))
+ggplot(loan_sample, aes(x = LoanOriginalAmount,y=..count..,colour=Team2,fill=Team2))+
+    geom_density(position = "fill")+
+    geom_abline(slope=-1.5e-5,intercept = 0.45,color="white")
+
+```
+
+
+```{r LoanOriginalAmount and Prosper rating part1,warning=FALSE,message=FALSE}
+loan_sample = loan2[, c("LoanOriginalAmount","ProsperRating..Alpha.")]
+loan_sample$Team2 <- factor(loan_sample$ProsperRating..Alpha., c("AA", "A", "B","C","D","E","HR",NA))
+
+ggplot(data=subset(loan_sample,!is.na(Team2)), aes(x = LoanOriginalAmount,y=..density..,colour=Team2,fill=Team2))+
+    geom_density(position = "fill")
+```
+
+Since AA data peak at 15000, we would exclude to analyze again
+```{r LoanOriginalAmount and Prosper rating part2,warning=FALSE,message=FALSE}
+loan_sample$Team2 <- factor(loan_sample$ProsperRating..Alpha., c(NA, "A", "B","C","D","E","HR",NA))
+
+ggplot(data=subset(loan_sample,!is.na(Team2)), aes(x = LoanOriginalAmount,y=..count..,colour=Team2,fill=Team2))+
+    geom_density(position = "fill")+
+    geom_abline(slope = -1e-5,intercept = 0.85,color="white")+
+    geom_abline(slope = -2e-5,intercept = 0.7,color="white")+
+    geom_abline(slope = -3e-5,intercept = 0.55,color="white")+
+    geom_abline(slope = -4e-5,intercept = 0.25,color="white")
+
+```
+```{r LoanOriginalAmount and year,warning=FALSE,message=FALSE}
+ggplot(data=subset(loan2,!is.na(year)), aes(x = LoanOriginalAmount,y=..density..,colour=year,fill=year))+
+    geom_density(position = "fill")+
+    geom_abline(slope=2.5e-5,intercept = 0.25,color="white")
+```
+Since we have already analyze the relationship between BorrowerAPR and Prosper Rating before, we know focus on other two factors.
+
+```{r BorrowerAPR v.s. factors, warning=FALSE,message=FALSE}
+set.seed(1)
+loan_sample = loan2[sample(1:length(loan2$LoanOriginalAmount), 10000), c("BorrowerAPR","status","year")]
+names(loan_sample)
+ggpairs(data=loan_sample)
+```
+we can find all factors above affect BorrowerAPR.
+```{r BorrowerAPR and Loan Status,warning=FALSE,message=FALSE}
+x = seq(0,0.4,0.001)
+loan_sample$Team2 <- factor(loan_sample$status, c("In process", "Past Due","Bad debt"))
+ggplot()+
+    geom_density(data=subset(loan_sample,!is.na(Team2)), aes(x = BorrowerAPR,y=..count..,colour=Team2,fill=Team2),position = "fill")+
+    geom_point(aes(x=seq(0,0.4,0.001), y=1 + 25*x*(x-0.4)),color="white",size=1e-4)
+```
+
+```{r BorrowerAPR and Loan original year,warning=FALSE,message=FALSE}
+x = seq(0,0.5,0.001)
+ggplot()+
+    geom_density(data=subset(loan2,!is.na(year)), aes(x = BorrowerAPR,y=..density..,colour=year,fill=year), position = "fill")+
+    geom_point(aes(x=seq(0,0.5,0.001), y=0 - 9*x*(x-0.5)),color="white",size=1e-4)
+
+
+```
+
+```{r borrower average income state map, warning=FALSE}
+all_states <- map_data("state")
+borrowerstate <- loan2 %>%
+    group_by(BorrowerState) %>%
+    summarise(avg_income = mean(StatedMonthlyIncome)) %>%
+arrange(BorrowerState)
+
+borrowerstate <- borrowerstate[borrowerstate$BorrowerState!="",]
+
+borrowerstate$region <-stateFromLower(borrowerstate$BorrowerState)
+
+Total <- merge(all_states, borrowerstate, by="region")
+
+ggplot()+ 
+    geom_polygon(data=Total, aes(x=long, y=lat, group = group, fill=Total$avg_income),colour="white"
+      ) + scale_fill_continuous(low = "white", high = "darkgreen", guide="colorbar")+ 
+    theme_bw()  + 
+    labs(fill = "borrowers",title = "Average Income of borrowers in each state", x="", y="")+
+    scale_y_continuous(breaks=c()) + scale_x_continuous(breaks=c()) + theme(panel.border =  element_blank())
+
+```
+```{r borrower homeowner percentage state map, warning=FALSE}
+all_states <- map_data("state")
+borrowerstate <- loan2 %>%
+    group_by(BorrowerState) %>%
+    summarise(percent_homeowner=sum(as.logical(IsBorrowerHomeowner)==TRUE)/n()) %>%
+arrange(BorrowerState)
+
+borrowerstate <- borrowerstate[borrowerstate$BorrowerState!="",]
+
+borrowerstate$region <-stateFromLower(borrowerstate$BorrowerState)
+
+Total <- merge(all_states, borrowerstate, by="region")
+
+ggplot()+ 
+    geom_polygon(data=Total, aes(x=long, y=lat, group = group, fill=Total$percent_homeowner),colour="white"
+      ) + scale_fill_continuous(low = "white", high = "gold3", guide="colorbar")+ 
+    theme_bw()  + 
+    labs(fill = "borrowers",title = "Percentage of homeowners of borrowers in each state", x="", y="")+
+    scale_y_continuous(breaks=c()) + scale_x_continuous(breaks=c()) + theme(panel.border =  element_blank())
+
+```
+
+```{r borrower average loan amount state map, warning=FALSE}
+all_states <- map_data("state")
+borrowerstate <- loan2 %>%
+    group_by(BorrowerState) %>%
+    summarise(avg_amount=mean(LoanOriginalAmount)) %>%
+arrange(BorrowerState)
+
+borrowerstate <- borrowerstate[borrowerstate$BorrowerState!="",]
+
+borrowerstate$region <-stateFromLower(borrowerstate$BorrowerState)
+
+Total <- merge(all_states, borrowerstate, by="region")
+
+ggplot()+ 
+    geom_polygon(data=Total, aes(x=long, y=lat, group = group, fill=Total$avg_amount),colour="white"
+      ) + scale_fill_continuous(low = "white", high = "red", guide="colorbar")+ 
+    theme_bw()  + 
+    labs(fill = "borrowers",title = "Percentage of homeowners of borrowers in each state", x="", y="")+
+    scale_y_continuous(breaks=c()) + scale_x_continuous(breaks=c()) + theme(panel.border =  element_blank())
+
+```
+# Bivariate Analysis
+
+### Talk about some of the relationships you observed in this part of the investigation. How did the feature(s) of interest vary with other features in the dataset?
+
+### Did you observe any interesting relationships between the other features (not the main feature(s) of interest)?
+
+### What was the strongest relationship you found?
+
+
+
+# Multivariate Plots Section
+```{r LoanOriginalAmount,MonthlyLoanPayment and LoanStatus classification}
+loan_sample = loan2[, c("LoanOriginalAmount","MonthlyLoanPayment","status")]
+loan_sample$Team2 <- factor(loan_sample$status, c("In process", "Past Due","Bad debt"))
+loan_sample = subset(loan_sample,!is.na(status)&MonthlyLoanPayment>0)
+fit <- glm(MonthlyLoanPayment~LoanOriginalAmount+Team2,data =loan_sample )
+fit2 <- glm(MonthlyLoanPayment~LoanOriginalAmount,data =loan_sample )
+fit$aic - fit2$aic
+```
+
+```{r LoanOriginalAmount,MonthlyLoanPayment and LoanStatus,warning=FALSE}
+ggplot(aes(x = LoanOriginalAmount, y = MonthlyLoanPayment, colour = Team2), data = loan_sample) + 
+  geom_point(alpha = 0.5, size = 1, position = 'jitter') +
+  scale_color_brewer(type = 'div',
+    guide = guide_legend(title = 'Loan Status', reverse = T,
+    override.aes = list(alpha = 1, size = 2))) +  
+    xlim(0,20000)+
+    ylim(0,700)+
+  ggtitle('')+
+    geom_abline(slope=fit$coefficients[2], intercept = fit$coefficients[1], color="brown")+
+    geom_abline(slope=fit$coefficients[2], intercept = fit$coefficients[1]+fit$coefficients[4], color="darkgreen")
+```
+The current and Finalpayment in process is in the lower region, the Past Due and Bad debt is in the upper region. 
+
+```{r LoanOriginalAmount,MonthlyLoanPayment and ProsperRating classification}
+loan_sample = loan2[, c("LoanOriginalAmount","MonthlyLoanPayment","ProsperRating..Alpha.")]
+loan_sample$Team2 <- factor(loan_sample$ProsperRating..Alpha., c("AA", "A", "B","C","D","E","HR",""))
+loan_sample = subset(loan_sample,!is.na(Team2)&Team2!=""&MonthlyLoanPayment>0)
+fit <- glm(MonthlyLoanPayment~LoanOriginalAmount+Team2,data =loan_sample )
+fit2 <- glm(MonthlyLoanPayment~LoanOriginalAmount,data =loan_sample )
+fit$aic - fit2$aic
+```
+
+
+```{r LoanOriginalAmount,MonthlyLoanPayment and ProsperRating,warning=FALSE}
+ggplot(aes(x = LoanOriginalAmount, y = MonthlyLoanPayment, colour = Team2), data = loan_sample) + 
+  geom_point(alpha = 0.5, size = 1, position = 'jitter') +
+  scale_color_brewer(type = 'div',
+    guide = guide_legend(title = 'Loan Status', reverse = T,
+    override.aes = list(alpha = 1, size = 2))) +  
+  ggtitle('')+
+    xlim(0,20000)+
+    ylim(0,700)+
+    geom_abline(slope=0.085,intercept = 0,color="red")+
+    geom_abline(slope=0.03,intercept = 0,color="red")+
+    geom_abline(slope=0.02,intercept = 0,color="red")
+
+```
+The Monthly Payment decided by loan original amount, interests rate and payment duration. The interests rate would be influenced by market, so there are 3 region in the map, indicate 3 different market rates. In each region, we can find better loan status will have a lower slope between loan orignal amount and monthly payment, which indicated a longer duration for higher loan status.
+
+
+```{r LoanOriginalAmount,MonthlyLoanPayment and Loan Orination year classification}
+loan_sample = loan2[, c("LoanOriginalAmount","MonthlyLoanPayment","year")]
+loan_sample = subset(loan_sample,!is.na(year)&MonthlyLoanPayment>0)
+fit <- glm(MonthlyLoanPayment~LoanOriginalAmount+year,data =loan_sample )
+fit2 <- glm(MonthlyLoanPayment~LoanOriginalAmount,data =loan_sample )
+fit$aic - fit2$aic
+```
+
+```{r LoanOriginalAmount,MonthlyLoanPayment and Loan Orination year, warning=FALSE}
+ggplot(aes(x = LoanOriginalAmount, y = MonthlyLoanPayment, colour = year), data = subset(loan_sample,!is.na(year)&MonthlyLoanPayment>0)) + 
+  geom_point(alpha = 0.5, size = 1, position = 'jitter') +
+  scale_color_brewer(palette = "Set1",type = 'div',
+    guide = guide_legend(title = 'Loan Status', reverse = T,
+    override.aes = list(alpha = 1, size = 2))) +  
+  ggtitle('')+
+    xlim(0,20000)+
+    ylim(0,700)+
+    geom_abline(slope=fit$coefficients[2],intercept = fit$coefficients[1], colour="white")
+```
+
+```{r BorrowerAPR, CreditScoreRangeLower and LoanStatus classification}
+loan_sample = loan2[, c("BorrowerAPR","CreditScoreRangeLower","status")]
+loan_sample$Team2 <- factor(loan_sample$status, c("In process", "Past Due","Bad debt"))
+
+loan_sample = subset(loan_sample,!is.na(Team2)&CreditScoreRangeLower>400)
+
+fit <- glm(CreditScoreRangeLower~BorrowerAPR+Team2,data =loan_sample )
+fit2 <- glm(CreditScoreRangeLower~BorrowerAPR,data =loan_sample )
+fit$aic - fit2$aic
+```
+
+```{r BorrowerAPR, CreditScoreRangeLower and LoanStatus,warning=FALSE}
+ggplot(aes(x= BorrowerAPR, y = CreditScoreRangeLower, colour = Team2), data =loan_sample) + 
+  geom_point(alpha = 0.5, size = 1, position = 'jitter') +
+  scale_color_brewer(palette = "Set1",type = 'div',
+    guide = guide_legend(title = 'Loan Status', reverse = T,
+    override.aes = list(alpha = 1, size = 2))) +  
+  ggtitle('')+
+    geom_abline(slope=fit$coefficients[2], intercept = fit$coefficients[1], color="red",col=2,lty=2)+
+    geom_abline(slope=fit$coefficients[2], intercept = fit$coefficients[1]+fit$coefficients[4], color="green",col=2,lty=2)+
+    geom_abline(slope=fit$coefficients[2], intercept = fit$coefficients[1]+fit$coefficients[3], color="blue",col=2,lty=2)
+    
+```
+```{r BorrowerAPR, CreditScoreRangeLower and Prosperscore Ranking, classfication}
+loan_sample = loan2[, c("BorrowerAPR","CreditScoreRangeLower","ProsperRating..Alpha.")]
+loan_sample$Team2 <- factor(loan_sample$ProsperRating..Alpha., c("AA", "A", "B","C","D","E","HR",""))
+loan_sample = subset(loan_sample,Team2!=""&CreditScoreRangeLower>400)
+fit <- glm(BorrowerAPR~CreditScoreRangeLower+Team2,data =loan_sample )
+fit2 <- glm(BorrowerAPR~CreditScoreRangeLower,data =loan_sample )
+fit$aic - fit2$aic
+```
+
+```{r BorrowerAPR, CreditScoreRangeLower and Prosperscore Ranking,warning=FALSE}
+ggplot(aes(x = CreditScoreRangeLower, y = BorrowerAPR, colour = Team2), data = loan_sample) + 
+  geom_point(alpha = 0.5, size = 1, position = 'jitter') +
+  scale_color_brewer(palette = "Set1",type = 'div',
+    guide = guide_legend(title = 'ProsperRating', reverse = T,
+    override.aes = list(alpha = 1, size = 2))) +  
+  ggtitle('')+
+    geom_abline(slope=fit$coefficients[2], intercept = fit$coefficients[1], color="red",col=2,lty=2)+
+    geom_abline(slope=fit$coefficients[2], intercept = fit$coefficients[1]+fit$coefficients[3], color="blue",col=2,lty=2)+
+    geom_abline(slope=fit$coefficients[2], intercept = fit$coefficients[1]+fit$coefficients[4], color="green",col=2,lty=2)+
+    geom_abline(slope=fit$coefficients[2], intercept = fit$coefficients[1]+fit$coefficients[5], color="purple",col=2,lty=2)+
+    geom_abline(slope=fit$coefficients[2], intercept = fit$coefficients[1]+fit$coefficients[6], color="orange",col=2,lty=2)+
+    geom_abline(slope=fit$coefficients[2], intercept = fit$coefficients[1]+fit$coefficients[7], color="yellow",col=2,lty=2)+
+    geom_abline(slope=fit$coefficients[2], intercept = fit$coefficients[1]+fit$coefficients[8], color="brown",col=2,lty=2)
+
+
+```
+
+```{r BorrowerAPR,CreditScoreRangeLower, LoanStatus and Prosperscore Ranking}
+loan_sample = loan2[, c("BorrowerAPR","CreditScoreRangeLower","status","ProsperRating..Alpha.")]
+loan_sample$Team2 <- factor(loan_sample$status, c("In process", "Past Due","Bad debt"))
+loan_sample$Team3 <- factor(loan_sample$ProsperRating..Alpha., c("AA", "A", "B","C","D","E","HR",""))
+
+ggplot(aes(x = BorrowerAPR, y = CreditScoreRangeLower, colour = Team3), data = subset(loan_sample,Team2!=""&Team3!=""&!is.na(Team3)&CreditScoreRangeLower>0))+
+  facet_wrap( ~Team2)+
+  geom_point(alpha = 0.5, size = 1, position = 'jitter') +
+  scale_color_brewer(palette = "Set1",type = 'div',
+    guide = guide_legend(title = 'ProsperRating', reverse = T,
+    override.aes = list(alpha = 1, size = 2))) +  
+  ggtitle('')
+
+```
+
+
+
+
+# Multivariate Analysis
+
+### Talk about some of the relationships you observed in this part of the investigation. Were there features that strengthened each other in terms of looking at your feature(s) of interest?
+
+### Were there any interesting or surprising interactions between features?
+
+### OPTIONAL: Did you create any models with your dataset? Discuss the strengths and limitations of your model.
+
+# Final Plots and Summary
+
+### Plot One
+
+```{r Plot_One preprocess,warning=FALSE}
+
+NPER <- function(rate, pmt, pv, fv=0, type=0){
+  nper = ifelse(rate!=0,
+        log10((pmt*(1+rate*type)-fv*rate)/(pmt*(1+rate*type)+pv*rate)) / log10(1+rate),
+        -1*(fv+pv)/pmt )
+  nper = as.integer(-nper)
+  return(nper)
+}
+
+sample_data = subset(loan2, !is.na(MonthlyLoanPayment)&!is.na(LenderYield)&!is.na(LoanOriginalAmount)&!is.na(BorrowerAPR)&!is.na(status))
+sample_data$N <- mapply(NPER,sample_data$LenderYield,sample_data$MonthlyLoanPayment,sample_data$LoanOriginalAmount)
+sample_data$N <- as.integer(sample_data$N)
+sample_data <- subset(sample_data,!is.na(N))
+Nfactor <- function(N){
+    Nrank = 0
+    if(N<qN[1]){Nrank = "~5"}
+    else if(N<qN[2]&N>=qN[1]){Nrank = "5~9"}
+    else if(N<qN[3]&N>=qN[2]){Nrank = "9~11"}
+    else if(N<qN[4]&N>=qN[3]){Nrank = "11~13"}
+    else if(N>=qN[4]){Nrank = "13~"}
+    return(Nrank)
+}
+sample_data =sample_data[, c("LoanOriginalAmount","MonthlyLoanPayment","status","N","BorrowerAPR")]
+
+qN = quantile(sample_data$N)
+sample_data$Nrank <-factor(as.character( lapply(sample_data$N,Nfactor)))
+sample_data$Nrank <-factor(sample_data$Nrank, c("~5","5~9","9~11","11~13","13~"))
+
+APRfactor <- function(APR){
+    APRrank = 0
+    if(APR<qAPR[1]){APRrank = "~0.01"}
+    else if(APR<qAPR[2]&APR>=qAPR[1]){APRrank = "0.01~0.17"}
+    else if(APR<qAPR[3]&APR>=qAPR[2]){APRrank = "0.17~0.21"}
+    else if(APR<qAPR[4]&APR>=qAPR[3]){APRrank = "0.21~0.28"}
+    else if(APR>=qAPR[4]){APRrank = "0.28~"}
+    return(APRrank)
+}
+qAPR = quantile(sample_data$BorrowerAPR)
+
+sample_data$APRrank <-factor(as.character( lapply(sample_data$BorrowerAPR,APRfactor)))
+
+```
+
+```{r BorrwerAPR and Duration Heat Map}
+sub_data <- sample_data %>%
+    group_by(Nrank,APRrank,status) %>%
+    summarise(Count = n())
+
+sub_data2 <- sample_data %>%
+    group_by(status) %>%
+    summarise(status_count = n())
+
+Total <- merge(sub_data, sub_data2, by="status")
+
+Total <- Total %>%
+    mutate(Percent=Count/status_count)
+    
+Total$status <- factor(Total$status, c("In process", "Past Due","Bad debt"))
+
+ggplot(aes(y = Nrank, x = APRrank, fill = Percent),
+  data = Total) +
+  geom_tile() +
+  scale_fill_gradientn(colours = colorRampPalette(c("#FFEEEE", "red"))(100))+
+    facet_wrap(~status)
+```
+
+
+### Description One
+
+
+### Plot Two
+```{r status occupation average income preprocess Plot_Two}
+sub_data <- subset(loan2, !is.na(status)&!is.na(Occupation)&Occupation!="") %>%
+    group_by(status,Occupation) %>%
+    summarise(avgincome = sum(StatedMonthlyIncome)/n(),n=n())
+sub_data2 <- subset(loan2, !is.na(status)&!is.na(Occupation)&Occupation!="") %>%
+    group_by(Occupation) %>%
+    summarise(total=n())
+
+Total <- merge(sub_data, sub_data2, by="Occupation")%>%
+    mutate(Percent=n/total)
+
+Total$status <- factor(Total$status, c("In process","Bad debt"))
+Total <- subset(Total,!is.na(status))
+a <- quantile(Total$Percent, 0.8)
+a <- Total[,"Percent"]>1
+```
+
+```{r status occupation average income Plot_Two}
+
+ggplot() + 
+  facet_wrap(~status)+
+  geom_point(aes(x = avgincome, y = Percent,color=status),data = subset(Total,status!="Past Due"),alpha = 0.5, size = 1, position = 'jitter') +
+  scale_color_brewer(palette = "Set1",type = 'div',
+    guide = guide_legend(title = 'status', reverse = T,
+    override.aes = list(alpha = 1, size = 2))) +  
+  ggtitle('')+
+    geom_smooth(aes(x = avgincome, y = Percent,color=status),data = subset(Total,status!="Past Due"),method = "lm",formula = y~log(x))+
+    geom_text(aes(label=Occupation,x=avgincome-1000,y=Percent+0.012,color=status),data = subset(Total,status=="In process"&Percent>0.88&Occupation!="Attorney"))+
+    geom_text(aes(label=Occupation,x=avgincome+800,y=Percent,color=status),data = subset(Total,status=="In process"&Occupation=="Attorney"))+
+    geom_text(aes(label=Occupation,x=avgincome+1000,y=Percent,color=status),data = subset(Total,Percent>0.62&status=="Bad debt"&Occupation!="Student - College Sophomore"))+
+    geom_text(aes(label=Occupation,x=avgincome+1000,y=Percent+0.02,color=status),data = subset(Total,status=="Bad debt"&Occupation=="Student - College Sophomore"))+
+    scale_x_log10()
+    
+```
+
+### Description Two
+
+
+### Plot Three
+```{r echo=FALSE, Plot_Three}
+limit <- c("Student - Technical School","Student - College Junior","Student - Community College","Student - College Sophomore","Student - College Freshman")
+sub_data <- subset(loan2,Occupation %in% limit&ListingCategory!="Not Available"&ListingCategory!="Other"&ListingCategory!="Debt Consolidation")
+sub_data1 <- sub_data %>%
+    group_by(Occupation,ListingCategory)%>%
+    summarise(n=n())%>%
+    arrange(Occupation,desc(n))%>%
+    slice(1:5)
+sub_data2 <- sub_data %>%
+    group_by(Occupation)%>%
+    summarise(count=n())
+
+Total1 <- merge(sub_data1,sub_data2, by="Occupation") %>%
+    mutate(Percent= n/count)
+
+
+limit <- c("Judge","Dentist","Attorney","Psychologist","Pilot - Private/Commercial")
+sub_data <- subset(loan2,Occupation %in% limit&ListingCategory!="Not Available"&ListingCategory!="Other"&ListingCategory!="Debt Consolidation")
+sub_data1 <- sub_data %>%
+    group_by(Occupation,ListingCategory)%>%
+    summarise(n=n())%>%
+    arrange(Occupation,desc(n))%>%
+    slice(1:5)
+sub_data2 <- sub_data %>%
+    group_by(Occupation)%>%
+    summarise(count=n())
+
+Total2 <- merge(sub_data1,sub_data2, by="Occupation")%>%
+    mutate(Percent= n/count)
+
+```
+
+```{r }
+ggplot(data=Total1, aes(x = ListingCategory,y = Occupation, fill = Percent)) +
+  geom_tile() +
+    theme(axis.text.x=element_text(angle = 90))+
+  scale_fill_gradientn(colours = colorRampPalette(c("lightblue", "darkblue"))(100))
+
+ggplot(data=Total2, aes(x = ListingCategory,y = Occupation, fill = Percent)) +
+  geom_tile() +
+    theme(axis.text.x=element_text(angle = 90))+
+  scale_fill_gradientn(colours = colorRampPalette(c("lightblue", "darkblue"))(100))
+
+```
+
+### Description Three
+Since we did not know what is the exactly reason people borrow money in "other"", "not Available"" or "debt consolidation", we would remove that from the table, even though that occupy over 50 percent of debt.
+
+# Reflection
+
