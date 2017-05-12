@@ -1,7 +1,7 @@
 # Propsper Loan Data Analysis
--- Details can be find at https://shawnxiaolongyang.github.io/LoanData_Exploration_by_Xiaolong.html
+**Details can be find at https://shawnxiaolongyang.github.io/LoanData_Exploration_by_Xiaolong.html**
 
-Prosper is America¡¯s first peer-to-peer lending marketplace, with more than 2 million members and over $2,000,000,000 in funded loans.
+Prosper is the first peer-to-peer lending marketplace in American, with more than 2 million members and over $2 billions in funded loans.
 
 The Prosper loan dataset contains 81 variables, with almost 114000 observations. However, not all of the variables are valuable to explore. To get enough information of both loans and borrowers, I would focus on variables for loans, such as loan amount, loan original date, estimated return of loan, current loan status, and variables for borrowers, such as borrowers Prosper rating, Prosper score, listing category,borrower APR, borrower income, borrower employment status, borrower occupation, borrower home owner, borrower credit history, borrower state, borrower total Prosper loans. 
 
@@ -64,37 +64,37 @@ Use corcolor to plot correlation http://www.sthda.com/english/wiki/correlation-m
 colors in R http://www.stat.columbia.edu/~tzheng/files/Rcolor.pdf
 
 # Reproducibility
-## R version 3.3.1 (2016-06-21)
-## Platform: x86_64-w64-mingw32/x64 (64-bit)
-## Running under: Windows 10 x64 (build 14393)
-## 
-## locale:
-## [1] LC_COLLATE=English_United States.1252 
-## [2] LC_CTYPE=English_United States.1252   
-## [3] LC_MONETARY=English_United States.1252
-## [4] LC_NUMERIC=C                          
-## [5] LC_TIME=English_United States.1252    
-## 
-## attached base packages:
-## [1] stats     graphics  grDevices utils     datasets  methods   base     
-## 
-## other attached packages:
-## [1] scales_0.4.1       RColorBrewer_1.1-2 corrplot_0.77     
-## [4] GGally_1.3.0       dplyr_0.5.0        maps_3.1.1        
-## [7] ggplot2_2.2.0     
-## 
-## loaded via a namespace (and not attached):
-##  [1] Rcpp_0.12.6         plyr_1.8.4          tools_3.3.1        
-##  [4] rpart_4.1-10        digest_0.6.10       base64_2.0         
-##  [7] htmlTable_1.7       evaluate_0.10       tibble_1.2         
-## [10] gtable_0.2.0        lattice_0.20-34     Matrix_1.2-6       
-## [13] DBI_0.5-1           yaml_2.1.14         gridExtra_2.2.1    
-## [16] cluster_2.0.4       stringr_1.0.0       knitr_1.15.1       
-## [19] nnet_7.3-12         rprojroot_1.1       grid_3.3.1         
-## [22] data.table_1.10.0   reshape_0.8.6       R6_2.2.0           
-## [25] survival_2.40-1     foreign_0.8-66      rmarkdown_1.3      
-## [28] latticeExtra_0.6-28 Formula_1.2-1       magrittr_1.5       
-## [31] backports_1.0.4     Hmisc_4.0-1         htmltools_0.3.5    
-## [34] splines_3.3.1       assertthat_0.1      colorspace_1.2-6   
-## [37] labeling_0.3        stringi_1.1.1       acepack_1.4.1      
-## [40] lazyeval_0.2.0      openssl_0.9.5       munsell_0.4.3
+ R version 3.3.1 (2016-06-21)
+ Platform: x86_64-w64-mingw32/x64 (64-bit)
+ Running under: Windows 10 x64 (build 14393)
+ 
+ locale:
+ [1] LC_COLLATE=English_United States.1252 
+ [2] LC_CTYPE=English_United States.1252   
+ [3] LC_MONETARY=English_United States.1252
+ [4] LC_NUMERIC=C                          
+ [5] LC_TIME=English_United States.1252    
+ 
+ attached base packages:
+ [1] stats     graphics  grDevices utils     datasets  methods   base     
+ 
+ other attached packages:
+ [1] scales_0.4.1       RColorBrewer_1.1-2 corrplot_0.77     
+ [4] GGally_1.3.0       dplyr_0.5.0        maps_3.1.1        
+ [7] ggplot2_2.2.0     
+ 
+ loaded via a namespace (and not attached):
+  [1] Rcpp_0.12.6         plyr_1.8.4          tools_3.3.1        
+  [4] rpart_4.1-10        digest_0.6.10       base64_2.0         
+  [7] htmlTable_1.7       evaluate_0.10       tibble_1.2         
+ [10] gtable_0.2.0        lattice_0.20-34     Matrix_1.2-6       
+ [13] DBI_0.5-1           yaml_2.1.14         gridExtra_2.2.1    
+ [16] cluster_2.0.4       stringr_1.0.0       knitr_1.15.1       
+ [19] nnet_7.3-12         rprojroot_1.1       grid_3.3.1         
+ [22] data.table_1.10.0   reshape_0.8.6       R6_2.2.0           
+ [25] survival_2.40-1     foreign_0.8-66      rmarkdown_1.3      
+ [28] latticeExtra_0.6-28 Formula_1.2-1       magrittr_1.5       
+ [31] backports_1.0.4     Hmisc_4.0-1         htmltools_0.3.5    
+ [34] splines_3.3.1       assertthat_0.1      colorspace_1.2-6   
+ [37] labeling_0.3        stringi_1.1.1       acepack_1.4.1      
+ [40] lazyeval_0.2.0      openssl_0.9.5       munsell_0.4.3
